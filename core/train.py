@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-#
-# Developed by Haozhe Xie <cshzxie@gmail.com>
-
 import os
 import random
 import torch
@@ -154,7 +150,8 @@ def train_net(cfg):
               (dt.now(), init_epoch, best_iou, best_epoch))
 
     # Summary writer for TensorBoard
-    output_dir = os.path.join(cfg.DIR.OUT_PATH, '%s', dt.now().isoformat())
+    timestamp = dt.now().strftime("%Y-%m-%dT%H-%M-%S")
+    output_dir = os.path.join(cfg.DIR.OUT_PATH, '%s', timestamp)
     log_dir = output_dir % 'logs'
     ckpt_dir = output_dir % 'checkpoints'
     train_writer = SummaryWriter(os.path.join(log_dir, 'train'))

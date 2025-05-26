@@ -1,8 +1,4 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-#
-# Developed by Haozhe Xie <cshzxie@gmail.com>
-
+#!/usr/bin/env python
 import logging
 import matplotlib
 import multiprocessing as mp
@@ -15,10 +11,13 @@ matplotlib.use('Agg')
 from argparse import ArgumentParser
 from datetime import datetime as dt
 from pprint import pprint
+import torch
 
 from config import cfg
 from core.train import train_net
 from core.test import test_net
+
+import sys, os, shutil
 
 
 def get_args_from_command_line():
@@ -66,8 +65,8 @@ def main():
     pprint(cfg)
 
     # Set GPU to use
-    if type(cfg.CONST.DEVICE) == str:
-        os.environ["CUDA_VISIBLE_DEVICES"] = cfg.CONST.DEVICE
+    # if type(cfg.CONST.DEVICE) == str:
+    #    os.environ["CUDA_VISIBLE_DEVICES"] = cfg.CONST.DEVICE
 
     # Start train/test process
     if not args.test:

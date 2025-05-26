@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-#
-# Developed by Haozhe Xie <cshzxie@gmail.com>
-
 import json
 import numpy as np
 import os
@@ -24,7 +20,7 @@ from models.merger import Merger
 
 def test_net(cfg,
              epoch_idx=-1,
-             output_dir=None,
+             output_dir='./output',
              test_data_loader=None,
              test_writer=None,
              encoder=None,
@@ -68,13 +64,15 @@ def test_net(cfg,
         merger = Merger(cfg)
 
         if torch.cuda.is_available():
+            print('[INFO] CUDA is available, moving networks to GPU ...')
             encoder = torch.nn.DataParallel(encoder).cuda()
             decoder = torch.nn.DataParallel(decoder).cuda()
             refiner = torch.nn.DataParallel(refiner).cuda()
             merger = torch.nn.DataParallel(merger).cuda()
 
-        print('[INFO] %s Loading weights from %s ...' % (dt.now(), cfg.CONST.WEIGHTS))
-        checkpoint = torch.load(cfg.CONST.WEIGHTS)
+        device = torch.device('cuda')
+        print('[INFO] %s Loading weights from %s onto %s ...' % (dt.now(), cfg.CONST.WEIGHTS, device))
+        checkpoint = torch.load(cfg.CONST.WEIGHTS, map_location=device, weights_only=False)
         epoch_idx = checkpoint['epoch_idx']
         encoder.load_state_dict(checkpoint['encoder_state_dict'])
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
@@ -142,18 +140,62 @@ def test_net(cfg,
             test_iou[taxonomy_id]['n_samples'] += 1
             test_iou[taxonomy_id]['iou'].append(sample_iou)
 
-            # Append generated volumes to TensorBoard
-            if output_dir and sample_idx < 3:
-                img_dir = output_dir % 'images'
-                # Volume Visualization
-                gv = generated_volume.cpu().numpy()
-                rendering_views = utils.binvox_visualization.get_volume_views(gv, os.path.join(img_dir, 'test'),
-                                                                              epoch_idx)
-                test_writer.add_image('Test Sample#%02d/Volume Reconstructed' % sample_idx, rendering_views, epoch_idx)
-                gtv = ground_truth_volume.cpu().numpy()
-                rendering_views = utils.binvox_visualization.get_volume_views(gtv, os.path.join(img_dir, 'test'),
-                                                                              epoch_idx)
-                test_writer.add_image('Test Sample#%02d/Volume GroundTruth' % sample_idx, rendering_views, epoch_idx)
+            if output_dir and sample_idx < 5:
+                import os
+                import numpy as np
+                import matplotlib.pyplot as plt
+                from torchvision.utils import make_grid
+        
+                # 1) Ensure output directory exists
+                img_dir = os.path.join(output_dir, 'images', 'test')
+                os.makedirs(img_dir, exist_ok=True)
+
+                # 2) Build a grid of the input renderings ([V, C, H, W] → one image)
+                inp = rendering_images.cpu().squeeze(0)  # [V, C, H, W]
+                grid = make_grid(inp, nrow=inp.shape[0], normalize=True, scale_each=True)
+
+                # 3) Get your “voxel views” image exactly as before for recon and ground truth
+                gv = generated_volume.cpu().numpy()       # [X, Y, Z]
+                rec_views = utils.binvox_visualization.get_volume_views(
+                    gv, img_dir, epoch_idx
+                )  # e.g. (C, H, W) or (H, W, C)
+
+                gtv = ground_truth_volume.cpu().numpy()   # [X, Y, Z]
+                gt_views = utils.binvox_visualization.get_volume_views(
+                    gtv, img_dir, epoch_idx
+                )
+
+                # 4) Massage channels if necessary: (C, H, W) → (H, W, C)
+                def to_hwc(arr):
+                    if arr.ndim == 3 and arr.shape[0] in (1, 3):
+                        return arr.transpose(1, 2, 0)
+                    return arr
+
+                rec_img = to_hwc(rec_views)
+                gt_img  = to_hwc(gt_views)
+
+                # 5) Plot side-by-side
+                fig = plt.figure(figsize=(12, 4))
+
+                ax1 = fig.add_subplot(1, 3, 1)
+                ax1.imshow(grid.permute(1, 2, 0))
+                ax1.set_title('Input Views')
+                ax1.axis('off')
+
+                ax2 = fig.add_subplot(1, 3, 2)
+                ax2.imshow(rec_img, aspect='equal')
+                ax2.set_title('Reconstructed Voxels')
+                ax2.axis('off')
+
+                ax3 = fig.add_subplot(1, 3, 3)
+                ax3.imshow(gt_img, aspect='equal')
+                ax3.set_title('Ground-Truth Voxels')
+                ax3.axis('off')
+
+                # 6) Save out with a unique filename
+                fname = f'{sample_name}_idx{sample_idx}_epoch{epoch_idx}.png'
+                fig.savefig(os.path.join(img_dir, fname), bbox_inches='tight')
+                plt.close(fig)
 
             # Print sample loss and IoU
             print('[INFO] %s Test[%d/%d] Taxonomy = %s Sample = %s EDLoss = %.4f RLoss = %.4f IoU = %s' %

@@ -1,0 +1,1 @@
+python runner.py --test --weights=./pretrained/Pix2Vox-A-ShapeNet.pth
